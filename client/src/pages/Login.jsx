@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -14,10 +15,12 @@ function Login() {
   const [error, setError] = useState("");
 
   function handleChange(event) {
-    setForm({
-      ...form,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   }
 
   async function handleSubmit(event) {
@@ -25,7 +28,10 @@ function Login() {
     setError("");
 
     try {
-      const user = await login(form.email, form.password);
+      const user = await login(
+        form.email.trim().toLowerCase(),
+        form.password
+      );
 
       if (user.role === "admin") {
         navigate("/admin");
@@ -35,6 +41,7 @@ function Login() {
     } catch (err) {
       setError(
         err.response?.data?.message ||
+        err.message ||
         "Login failed. Please check your email and password."
       );
     }
@@ -44,13 +51,22 @@ function Login() {
     <section className="auth-section">
       <div className="auth-card">
         <div className="text-center mb-4">
-          <img src="/images/logo.png" alt="Resort logo" className="auth-logo" />
+          <img
+            src="/images/logo.png"
+            alt="Resort logo"
+            className="auth-logo"
+          />
+
           <span className="section-label">WELCOME BACK</span>
           <h2>Login to Your Account</h2>
           <p>Access your resort booking account.</p>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
@@ -77,7 +93,11 @@ function Login() {
             />
           </div>
 
-          <button className="btn btn-primary w-100" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary w-100"
+            disabled={loading}
+          >
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>

@@ -20,7 +20,21 @@ import ManagePayments from "./pages/admin/ManagePayments";
 import ManageCustomers from "./pages/admin/ManageCustomers";
 import Reports from "./pages/admin/Reports";
 
+import { useEffect } from "react";
+import api from "./services/api";
+
+
 function App() {
+  useEffect(() => {
+  api.get("/health")
+    .then((response) => {
+      console.log("Backend connection successful!");
+      console.log(response.data);
+    })
+    .catch((error) => {
+      console.error("Backend connection failed:", error);
+    });
+}, []);
   return (
     <BrowserRouter>
       <Routes>

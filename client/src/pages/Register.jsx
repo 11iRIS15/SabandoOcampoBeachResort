@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -17,10 +18,12 @@ function Register() {
   const [error, setError] = useState("");
 
   function handleChange(event) {
-    setForm({
-      ...form,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   }
 
   async function handleSubmit(event) {
@@ -39,9 +42,9 @@ function Register() {
 
     try {
       await register({
-        fullName: form.fullName,
-        email: form.email,
-        phone: form.phone,
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
         password: form.password,
       });
 
@@ -49,6 +52,7 @@ function Register() {
     } catch (err) {
       setError(
         err.response?.data?.message ||
+        err.message ||
         "Registration failed. Please try again."
       );
     }
@@ -58,18 +62,28 @@ function Register() {
     <section className="auth-section">
       <div className="auth-card">
         <div className="text-center mb-4">
-          <img src="/images/logo.png" alt="Resort logo" className="auth-logo" />
+          <img
+            src="/images/logo.png"
+            alt="Resort logo"
+            className="auth-logo"
+          />
+
           <span className="section-label">CREATE AN ACCOUNT</span>
           <h2>Customer Registration</h2>
           <p>Register to request and manage your bookings.</p>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
             <label className="form-label">Full Name</label>
             <input
+              type="text"
               className="form-control"
               name="fullName"
               value={form.fullName}
@@ -110,7 +124,7 @@ function Register() {
               name="password"
               value={form.password}
               onChange={handleChange}
-              minLength="8"
+              minLength={8}
               required
             />
           </div>
@@ -127,7 +141,11 @@ function Register() {
             />
           </div>
 
-          <button className="btn btn-primary w-100" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary w-100"
+            disabled={loading}
+          >
             {loading ? "Creating Account..." : "Create Account"}
           </button>
         </form>

@@ -1,39 +1,22 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
-
-const rooms = [
-  { id: "native-ordinary", name: "Native Ordinary", price: 1000, guests: 2 },
-  { id: "native-aircon", name: "Native Aircon", price: 1500, guests: 2 },
-  { id: "deluxe-twin", name: "Deluxe Twin", price: 1800, guests: 2 },
-  { id: "vip-twin", name: "VIP Twin", price: 2000, guests: 2 },
-  { id: "chalet", name: "Chalet", price: 2300, guests: 2 },
-  { id: "deluxe-quad", name: "Deluxe Quad", price: 3400, guests: 4 },
-  { id: "vip-quad", name: "VIP Quad", price: 3500, guests: 4 },
-  { id: "deluxe-family-6", name: "Deluxe Family (6 guests)", price: 4800, guests: 6 },
-  { id: "deluxe-family-8", name: "Deluxe Family (8 guests)", price: 6800, guests: 8 },
-  { id: "main-house", name: "Main House", price: 10800, guests: 12 },
-  { id: "sori-cabana-2", name: "Sori Annex Cabana (2 guests)", price: 1800, guests: 2 },
-  { id: "sori-cabana-3", name: "Sori Annex Cabana (3 guests)", price: 2500, guests: 3 },
-  { id: "sori-standard", name: "Sori Annex Standard Room", price: 3200, guests: 4 },
-  { id: "sori-dormitory", name: "Sori Annex Dormitory UP/DOWN", price: 8000, guests: 10 },
-  { id: "sori-dormitory-cottage", name: "Sori Annex Dormitory with Cottage", price: 9000, guests: 10 },
-];
 
 function Booking() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
 
-  const selectedRoom = rooms.find(
-  (room) => room.id === form.accommodationId
-);
+  const [rooms, setRooms] = useState([]);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+  const [roomError, setRoomError] = useState("");
 
   const [form, setForm] = useState({
-    fullName: user?.name || user?.fullName || "",
+    fullName: user?.full_name || user?.fullName || user?.name || "",
     email: user?.email || "",
-    phone: "",
+    phone: user?.phone || "",
     accommodationId: id || "",
     checkIn: "",
     checkOut: "",
@@ -45,17 +28,76 @@ function Booking() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Get accommodations from the backend.
+  useEffect(() => {
+    async function fetchRooms() {
+      try {
+        setLoadingRooms(true);
+        setRoomError("");
+
+        const response = await api.get("/accommodations");
+
+        const accommodationData = response.data.accommodations || [];
+
+        const roomData = accommodationData
+          .filter((item) => {
+            const category = String(item.category || "").toLowerCase();
+
+            return category === "room" || category === "sori annex";
+          })
+          .map((item) => ({
+            id: item.accommodation_code,
+            name: item.name,
+            price: Number(item.price),
+            guests: Number(item.capacity),
+            units: Number(item.quantity),
+            image: item.image,
+            description: item.description,
+            category: item.category,
+          }));
+
+        setRooms(roomData);
+
+        // Select the accommodation from the URL.
+        if (id && roomData.some((room) => room.id === id)) {
+          setForm((previous) => ({
+            ...previous,
+            accommodationId: id,
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to load accommodations:", err);
+
+        setRoomError(
+          err.response?.data?.message ||
+            "Unable to load accommodations. Please check your backend connection."
+        );
+      } finally {
+        setLoadingRooms(false);
+      }
+    }
+
+    fetchRooms();
+  }, [id]);
+
+  // Find the selected accommodation.
+  const selectedRoom = rooms.find(
+    (room) => room.id === form.accommodationId
+  );
+
   function handleChange(event) {
     const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
       [name]: value,
+      ...(name === "accommodationId" ? { guests: 1 } : {}),
     }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
     setError("");
     setSuccess("");
 
@@ -64,8 +106,14 @@ function Booking() {
       return;
     }
 
+    if (!selectedRoom) {
+      setError("Please select a valid accommodation.");
+      return;
+    }
+
     const checkIn = new Date(`${form.checkIn}T00:00:00`);
     const checkOut = new Date(`${form.checkOut}T00:00:00`);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -79,9 +127,9 @@ function Booking() {
       return;
     }
 
-    if (selectedRoom && Number(form.guests) > selectedRoom.guests) {
+    if (Number(form.guests) > selectedRoom.guests) {
       setError(
-        `The listed guest capacity for this accommodation is ${selectedRoom.guests}.`
+        `The maximum guest capacity for this accommodation is ${selectedRoom.guests}.`
       );
       return;
     }
@@ -90,7 +138,7 @@ function Booking() {
 
     try {
       const response = await api.post("/bookings", {
-        accommodationId: form.accommodationId,
+        accommodationId: selectedRoom.id,
         fullName: form.fullName,
         email: form.email,
         phone: form.phone,
@@ -101,14 +149,19 @@ function Booking() {
       });
 
       setSuccess(
-        response.data.message || "Your reservation request was submitted."
+        response.data.message ||
+          "Your reservation request was submitted successfully."
       );
 
-      setTimeout(() => navigate("/my-bookings"), 1500);
+      setTimeout(() => {
+        navigate("/my-bookings");
+      }, 1500);
     } catch (err) {
+      console.error("Booking submission failed:", err);
+
       setError(
         err.response?.data?.message ||
-        "Unable to submit your booking. Please check your backend connection."
+          "Unable to submit your booking. Please check your backend connection."
       );
     } finally {
       setLoading(false);
@@ -119,39 +172,78 @@ function Booking() {
     <section className="section-padding bg-soft">
       <div className="container">
         <div className="booking-form-card">
+
           <div className="text-center mb-4">
-            <span className="section-label">RESERVATION REQUEST</span>
-            <h1 className="section-title">Book Your Stay</h1>
-            <p>Complete the form to request your accommodation.</p>
+            <span className="section-label">
+              RESERVATION REQUEST
+            </span>
+
+            <h1 className="section-title">
+              Book Your Stay
+            </h1>
+
+            <p>
+              Complete the form to request your accommodation.
+            </p>
           </div>
 
           {!isAuthenticated && (
             <div className="alert alert-info">
-              You need to <Link to="/login">log in</Link> before submitting
-              a reservation.
+              You need to <Link to="/login">log in</Link> before
+              submitting a reservation.
             </div>
           )}
 
-          {error && <div className="alert alert-danger">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
+          {roomError && (
+            <div className="alert alert-danger">
+              {roomError}
+            </div>
+          )}
 
-          {selectedRoom && (
+          {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="alert alert-success">
+              {success}
+            </div>
+          )}
+
+          {loadingRooms && (
+            <div className="text-center py-3">
+              Loading accommodation information...
+            </div>
+          )}
+
+          {!loadingRooms && selectedRoom && (
             <div className="selected-room mb-4">
               <h5>{selectedRoom.name}</h5>
-              <p className="mb-0">
+
+              <p className="mb-1">
                 Historical 2025 rate: ₱
-                {selectedRoom.price.toLocaleString("en-PH")} · Listed
-                capacity: {selectedRoom.guests} guests
+                {selectedRoom.price.toLocaleString("en-PH")}
+              </p>
+
+              <p className="mb-0">
+                Listed capacity: {selectedRoom.guests} guests
               </p>
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            <h5 className="form-section-title">Customer Information</h5>
+            <h5 className="form-section-title">
+              Customer Information
+            </h5>
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Full Name</label>
+                <label className="form-label">
+                  Full Name
+                </label>
+
                 <input
                   className="form-control"
                   name="fullName"
@@ -162,7 +254,10 @@ function Booking() {
               </div>
 
               <div className="col-md-6 mb-3">
-                <label className="form-label">Email Address</label>
+                <label className="form-label">
+                  Email Address
+                </label>
+
                 <input
                   type="email"
                   className="form-control"
@@ -175,7 +270,10 @@ function Booking() {
             </div>
 
             <div className="mb-4">
-              <label className="form-label">Contact Number</label>
+              <label className="form-label">
+                Contact Number
+              </label>
+
               <input
                 type="tel"
                 className="form-control"
@@ -188,21 +286,32 @@ function Booking() {
 
             <hr />
 
-            <h5 className="form-section-title">Booking Details</h5>
+            <h5 className="form-section-title">
+              Booking Details
+            </h5>
 
             <div className="mb-3">
-              <label className="form-label">Accommodation</label>
+              <label className="form-label">
+                Accommodation
+              </label>
+
               <select
                 className="form-select"
                 name="accommodationId"
                 value={form.accommodationId}
                 onChange={handleChange}
                 required
+                disabled={loadingRooms || Boolean(roomError)}
               >
-                <option value="">Select accommodation</option>
+                <option value="">
+                  Select accommodation
+                </option>
+
                 {rooms.map((room) => (
                   <option key={room.id} value={room.id}>
-                    {room.name}
+                    {room.name} - ₱
+                    {room.price.toLocaleString("en-PH")} (
+                    {room.guests} guests)
                   </option>
                 ))}
               </select>
@@ -210,12 +319,15 @@ function Booking() {
 
             <div className="row">
               <div className="col-md-4 mb-3">
-                <label className="form-label">Check-in Date</label>
+                <label className="form-label">
+                  Check-in Date
+                </label>
+
                 <input
                   type="date"
                   className="form-control"
                   name="checkIn"
-                  min={new Date().toISOString().split("T")[0]}
+                  min={new Date().toLocaleDateString("en-CA")}
                   value={form.checkIn}
                   onChange={handleChange}
                   required
@@ -223,12 +335,18 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">Check-out Date</label>
+                <label className="form-label">
+                  Check-out Date
+                </label>
+
                 <input
                   type="date"
                   className="form-control"
                   name="checkOut"
-                  min={form.checkIn || new Date().toISOString().split("T")[0]}
+                  min={
+                    form.checkIn ||
+                    new Date().toLocaleDateString("en-CA")
+                  }
                   value={form.checkOut}
                   onChange={handleChange}
                   required
@@ -236,21 +354,34 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">Number of Guests</label>
+                <label className="form-label">
+                  Number of Guests
+                </label>
+
                 <input
                   type="number"
                   className="form-control"
                   name="guests"
                   min="1"
+                  max={selectedRoom?.guests || undefined}
                   value={form.guests}
                   onChange={handleChange}
                   required
                 />
+
+                {selectedRoom && (
+                  <small className="text-muted">
+                    Maximum: {selectedRoom.guests} guests
+                  </small>
+                )}
               </div>
             </div>
 
             <div className="mb-4">
-              <label className="form-label">Additional Requests</label>
+              <label className="form-label">
+                Additional Requests
+              </label>
+
               <textarea
                 className="form-control"
                 rows="4"
@@ -264,14 +395,22 @@ function Booking() {
             <button
               className="btn btn-primary btn-lg w-100"
               type="submit"
-              disabled={loading}
+              disabled={
+                loading ||
+                loadingRooms ||
+                Boolean(roomError) ||
+                !selectedRoom
+              }
             >
-              {loading ? "Submitting..." : "Submit Reservation Request"}
+              {loading
+                ? "Submitting..."
+                : "Submit Reservation Request"}
             </button>
 
             <p className="small text-muted mt-3">
-              Submitting a request does not mean the reservation is confirmed.
-              The resort must verify availability and approve the booking.
+              Submitting a request does not mean the reservation
+              is confirmed. The resort must verify availability
+              and approve the booking.
             </p>
           </form>
         </div>

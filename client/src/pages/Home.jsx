@@ -184,8 +184,8 @@ function Home() {
           <h2>Plan Your Next Beach Visit</h2>
           <p>Explore the accommodations and send a reservation request.</p>
           <Link to="/accommodations" className="btn btn-light btn-lg">
-            Book Your Stay
-          </Link>
+  Book Your Stay <ArrowRight size={18} />
+</Link>
         </div>
       </section>
     </>
