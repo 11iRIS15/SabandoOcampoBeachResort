@@ -1,7 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useState,
 } from "react";
 
@@ -20,6 +19,7 @@ export function AuthProvider({ children }) {
 
   const [loading, setLoading] = useState(false);
 
+  // CUSTOMER LOGIN
   async function login(email, password) {
     setLoading(true);
 
@@ -30,6 +30,10 @@ export function AuthProvider({ children }) {
       });
 
       const { token, user: loggedInUser } = response.data;
+
+      if (!token || !loggedInUser) {
+        throw new Error("Invalid login response from server.");
+      }
 
       localStorage.setItem("resortToken", token);
       localStorage.setItem("resortUser", JSON.stringify(loggedInUser));
@@ -42,6 +46,7 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // CUSTOMER REGISTRATION
   async function register(userData) {
     setLoading(true);
 
@@ -50,9 +55,10 @@ export function AuthProvider({ children }) {
 
       const { token, user: registeredUser } = response.data;
 
-      if (token) {
+      if (token && registeredUser) {
         localStorage.setItem("resortToken", token);
         localStorage.setItem("resortUser", JSON.stringify(registeredUser));
+
         setUser(registeredUser);
       }
 
@@ -62,9 +68,11 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // CUSTOMER LOGOUT
   function logout() {
     localStorage.removeItem("resortToken");
     localStorage.removeItem("resortUser");
+
     setUser(null);
   }
 
@@ -84,6 +92,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// CUSTOM AUTHENTICATION HOOK
 export function useAuth() {
   const context = useContext(AuthContext);
 

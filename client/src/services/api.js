@@ -1,13 +1,13 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: "http://localhost:5000/api",
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Attach the logged-in user's token to API requests.
+// Automatically attach the customer's or administrator's token.
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("resortToken");
@@ -18,18 +18,7 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => Promise.reject(error)
-);
-
-// Handle expired or invalid login sessions.
-api.interceptors.response.use(
-  (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("resortToken");
-      localStorage.removeItem("resortUser");
-    }
-
     return Promise.reject(error);
   }
 );
