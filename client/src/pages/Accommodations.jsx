@@ -35,7 +35,7 @@ function RoomCard({ room }) {
 
           <div className="room-price">
             ₱{Number(room.price).toLocaleString("en-PH")}
-            <small> / rate shown on 2025 board</small>
+            <small> / per night or rate</small>
           </div>
 
           <Link
@@ -68,22 +68,18 @@ function Accommodations() {
 
       const accommodationData = response.data.accommodations || [];
 
-      // Keep only room accommodations.
-      // Beach facilities and other non-room records are excluded.
       const roomData = accommodationData
-        .filter((item) => {
-          const category = String(item.category || "").toLowerCase();
-          return category === "room" || category === "sori annex";
-        })
+        .filter((item) => item.is_active !== false)
         .map((item) => ({
-          id: item.accommodation_code,
+          id: item._id || item.id || item.accommodation_code,
           name: item.name,
-          price: Number(item.price),
-          guests: item.capacity,
-          units: item.quantity,
+          price: Number(item.price || 0),
+          guests: item.capacity || 0,
+          units: item.quantity || 1,
           image: item.image,
           description: item.description,
-          category: item.category,
+          category: item.category || "Other",
+          accommodation_code: item.accommodation_code,
         }));
 
       setRooms(roomData);
@@ -99,13 +95,17 @@ function Accommodations() {
     }
   }
 
-  const regularRooms = rooms.filter(
-    (room) => room.category.toLowerCase() === "room"
-  );
+  const groupedRooms = rooms.reduce((groups, room) => {
+    const category = room.category || "Other";
 
-  const soriRooms = rooms.filter(
-    (room) => room.category.toLowerCase() === "sori annex"
-  );
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+
+    groups[category].push(room);
+
+    return groups;
+  }, {});
 
   return (
     <>
@@ -119,26 +119,20 @@ function Accommodations() {
 
       <section className="section-padding">
         <div className="container">
-
           <div className="notice-box mb-5">
-            <strong>Rate information:</strong> The prices shown are taken
-            from the resort's 2025 rate board supplied for this project.
-            Please confirm current rates, capacity, and availability with
+            <strong>Rate information:</strong> Accommodation rates are
+            displayed based on the available resort records. Please
+            confirm current rates, capacity, and availability with
             the resort before accepting reservations.
           </div>
 
           {loading && (
             <div className="text-center py-5">
-              <div
-                className="spinner-border text-primary"
-                role="status"
-              >
+              <div className="spinner-border text-primary" role="status">
                 <span className="visually-hidden">Loading...</span>
               </div>
 
-              <p className="mt-3">
-                Loading accommodations...
-              </p>
+              <p className="mt-3">Loading accommodations...</p>
             </div>
           )}
 
@@ -161,63 +155,31 @@ function Accommodations() {
             </div>
           )}
 
-          {!loading && !error && (
+          {!loading && !error && rooms.length > 0 && (
             <>
-              {regularRooms.length > 0 && (
-                <>
+              {Object.entries(groupedRooms).map(([category, categoryRooms]) => (
+                <div key={category} className="mb-5">
                   <div className="section-heading">
                     <span className="section-label">
-                      ROOMS AND COTTAGES
+                      ACCOMMODATION
                     </span>
 
                     <h2 className="section-title">
-                      Regular Rates
+                      {category === "Other"
+                        ? "Cottages, Beach Areas & Other Accommodations"
+                        : category}
                     </h2>
                   </div>
 
                   <div className="row g-4">
-                    {regularRooms.map((room) => (
+                    {categoryRooms.map((room) => (
                       <RoomCard room={room} key={room.id} />
                     ))}
                   </div>
-                </>
-              )}
-
-              {soriRooms.length > 0 && (
-                <>
-                  <div className="section-heading mt-5">
-                    <span className="section-label">
-                      SORI ANNEX
-                    </span>
-
-                    <h2 className="section-title">
-                      Sori Annex Rates
-                    </h2>
-                  </div>
-
-                  <div className="row g-4">
-                    {soriRooms.map((room) => (
-                      <RoomCard room={room} key={room.id} />
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="notice-box mt-5">
-                <h5>Excess Guest Charges on the 2025 Rate Board</h5>
-
-                <p className="mb-1">Adult: ₱400 per head</p>
-                <p className="mb-0">Child: ₱300 per head</p>
-
-                <small>
-                  Confirm the resort's current age definitions and
-                  excess-person rules before using these amounts
-                  in a real booking calculation.
-                </small>
-              </div>
+                </div>
+              ))}
             </>
           )}
-
         </div>
       </section>
     </>

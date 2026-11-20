@@ -1,16 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
-const {
-  getReports
-} = require("../controllers/reportController");
+const { getReports } = require("../controllers/reportController");
 
-const {
-  verifyToken,
-  adminOnly
-} = require("../middleware/authMiddleware");
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", getReports);
 

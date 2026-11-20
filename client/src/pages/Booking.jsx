@@ -28,6 +28,7 @@ function Booking() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Load accommodations from MongoDB
   useEffect(() => {
     async function fetchRooms() {
       try {
@@ -41,36 +42,36 @@ function Booking() {
           response.data.data ||
           [];
 
+        // Include all active accommodations
         const roomData = accommodationData
-          .filter((item) => {
-            const category = String(item.category || "").toLowerCase();
-
-            return category === "room" || category === "sori annex";
-          })
+          .filter((item) => item.is_active !== false)
           .map((item) => ({
-            id: item._id,
+            id: item._id || item.id,
             code: item.accommodation_code,
             name: item.name,
             price: Number(item.price || 0),
             guests: Number(item.capacity || 1),
-            units: Number(item.quantity || 0),
+            units: Number(item.quantity || 1),
             image: item.image,
             description: item.description,
-            category: item.category,
-          }));
+            category: item.category || "Other",
+          }))
+          .filter((item) => item.id);
 
         setRooms(roomData);
 
-        if (
-          id &&
-          roomData.some(
+        // Automatically select the accommodation from the URL
+        if (id) {
+          const matchingRoom = roomData.find(
             (room) => room.id === id || room.code === id
-          )
-        ) {
-          setForm((previous) => ({
-            ...previous,
-            accommodationId: id,
-          }));
+          );
+
+          if (matchingRoom) {
+            setForm((previous) => ({
+              ...previous,
+              accommodationId: matchingRoom.id,
+            }));
+          }
         }
       } catch (err) {
         console.error("Failed to load accommodations:", err);
@@ -87,10 +88,25 @@ function Booking() {
     fetchRooms();
   }, [id]);
 
+  // Update customer information when the authenticated user is available
+  useEffect(() => {
+    if (!user) return;
+
+    setForm((previous) => ({
+      ...previous,
+      fullName:
+        user.full_name ||
+        user.fullName ||
+        user.name ||
+        previous.fullName,
+      email: user.email || previous.email,
+      phone: user.phone || previous.phone,
+    }));
+  }, [user]);
+
+  // Find the selected accommodation
   const selectedRoom = rooms.find(
-    (room) =>
-      room.id === form.accommodationId ||
-      room.code === form.accommodationId
+    (room) => room.id === form.accommodationId
   );
 
   function handleChange(event) {
@@ -101,20 +117,27 @@ function Booking() {
       [name]: value,
       ...(name === "accommodationId" ? { guests: 1 } : {}),
     }));
+
+    setError("");
   }
 
+  // Calculate the number of nights
   function calculateNights() {
     if (!form.checkIn || !form.checkOut) return 0;
 
-    const checkIn = new Date(`${form.checkIn}T00:00:00`);
-    const checkOut = new Date(`${form.checkOut}T00:00:00`);
+    const checkInDate = new Date(`${form.checkIn}T00:00:00`);
+    const checkOutDate = new Date(`${form.checkOut}T00:00:00`);
 
-    const difference = checkOut - checkIn;
+    const difference = checkOutDate - checkInDate;
 
-    return Math.max(0, Math.ceil(difference / (1000 * 60 * 60 * 24)));
+    return Math.max(
+      0,
+      Math.round(difference / (1000 * 60 * 60 * 24))
+    );
   }
 
   const nights = calculateNights();
+
   const estimatedTotal = selectedRoom
     ? selectedRoom.price * nights
     : 0;
@@ -130,23 +153,36 @@ function Booking() {
       return;
     }
 
+    if (
+      !form.fullName.trim() ||
+      !form.email.trim() ||
+      !form.phone.trim() ||
+      !form.accommodationId ||
+      !form.checkIn ||
+      !form.checkOut ||
+      !form.guests
+    ) {
+      setError("Please complete all required booking fields.");
+      return;
+    }
+
     if (!selectedRoom) {
       setError("Please select a valid accommodation.");
       return;
     }
 
-    const checkIn = new Date(`${form.checkIn}T00:00:00`);
-    const checkOut = new Date(`${form.checkOut}T00:00:00`);
+    const checkInDate = new Date(`${form.checkIn}T00:00:00`);
+    const checkOutDate = new Date(`${form.checkOut}T00:00:00`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    if (checkIn < today) {
+    if (checkInDate < today) {
       setError("Check-in date cannot be in the past.");
       return;
     }
 
-    if (checkOut <= checkIn) {
+    if (checkOutDate <= checkInDate) {
       setError("Check-out must be later than check-in.");
       return;
     }
@@ -166,16 +202,22 @@ function Booking() {
     setLoading(true);
 
     try {
-      const response = await api.post("/mongodb/bookings", {
-        accommodationId: selectedRoom.id,
-        fullName: form.fullName,
-        email: form.email,
-        phone: form.phone,
-        checkIn: form.checkIn,
-        checkOut: form.checkOut,
+      // IMPORTANT:
+      // These property names now match bookingMongoController.js
+      const bookingData = {
+        accommodation_id: selectedRoom.id,
+        check_in: form.checkIn,
+        check_out: form.checkOut,
         guests: Number(form.guests),
-        requests: form.requests,
-      });
+        special_requests: form.requests.trim(),
+      };
+
+      console.log("Booking payload:", bookingData);
+
+      const response = await api.post(
+        "/mongodb/bookings",
+        bookingData
+      );
 
       setSuccess(
         response.data.message ||
@@ -187,6 +229,7 @@ function Booking() {
       }, 1500);
     } catch (err) {
       console.error("Booking submission failed:", err);
+      console.error("Booking server response:", err.response?.data);
 
       setError(
         err.response?.data?.message ||
@@ -202,7 +245,9 @@ function Booking() {
       <div className="container">
         <div className="booking-form-card">
           <div className="text-center mb-4">
-            <span className="section-label">RESERVATION REQUEST</span>
+            <span className="section-label">
+              RESERVATION REQUEST
+            </span>
 
             <h1 className="section-title">Book Your Stay</h1>
 
@@ -219,15 +264,21 @@ function Booking() {
           )}
 
           {roomError && (
-            <div className="alert alert-danger">{roomError}</div>
+            <div className="alert alert-danger">
+              {roomError}
+            </div>
           )}
 
           {error && (
-            <div className="alert alert-danger">{error}</div>
+            <div className="alert alert-danger">
+              {error}
+            </div>
           )}
 
           {success && (
-            <div className="alert alert-success">{success}</div>
+            <div className="alert alert-success">
+              {success}
+            </div>
           )}
 
           {loadingRooms && (
@@ -273,9 +324,12 @@ function Booking() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Full Name</label>
+                <label className="form-label">
+                  Full Name
+                </label>
 
                 <input
+                  type="text"
                   className="form-control"
                   name="fullName"
                   value={form.fullName}
@@ -285,7 +339,9 @@ function Booking() {
               </div>
 
               <div className="col-md-6 mb-3">
-                <label className="form-label">Email Address</label>
+                <label className="form-label">
+                  Email Address
+                </label>
 
                 <input
                   type="email"
@@ -299,7 +355,9 @@ function Booking() {
             </div>
 
             <div className="mb-4">
-              <label className="form-label">Contact Number</label>
+              <label className="form-label">
+                Contact Number
+              </label>
 
               <input
                 type="tel"
@@ -318,7 +376,9 @@ function Booking() {
             </h5>
 
             <div className="mb-3">
-              <label className="form-label">Accommodation</label>
+              <label className="form-label">
+                Accommodation
+              </label>
 
               <select
                 className="form-select"
@@ -328,7 +388,9 @@ function Booking() {
                 required
                 disabled={loadingRooms || Boolean(roomError)}
               >
-                <option value="">Select accommodation</option>
+                <option value="">
+                  Select accommodation
+                </option>
 
                 {rooms.map((room) => (
                   <option key={room.id} value={room.id}>
@@ -342,13 +404,15 @@ function Booking() {
 
             <div className="row">
               <div className="col-md-4 mb-3">
-                <label className="form-label">Check-in Date</label>
+                <label className="form-label">
+                  Check-in Date
+                </label>
 
                 <input
                   type="date"
                   className="form-control"
                   name="checkIn"
-                  min={new Date().toLocaleDateString("en-CA")}
+                  min={new Date().toISOString().split("T")[0]}
                   value={form.checkIn}
                   onChange={handleChange}
                   required
@@ -356,13 +420,18 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">Check-out Date</label>
+                <label className="form-label">
+                  Check-out Date
+                </label>
 
                 <input
                   type="date"
                   className="form-control"
                   name="checkOut"
-                  min={form.checkIn || new Date().toLocaleDateString("en-CA")}
+                  min={
+                    form.checkIn ||
+                    new Date().toISOString().split("T")[0]
+                  }
                   value={form.checkOut}
                   onChange={handleChange}
                   required
@@ -370,14 +439,16 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">Number of Guests</label>
+                <label className="form-label">
+                  Number of Guests
+                </label>
 
                 <input
                   type="number"
                   className="form-control"
                   name="guests"
                   min="1"
-                  max={selectedRoom?.guests || undefined}
+                  max={selectedRoom?.guests || 1}
                   value={form.guests}
                   onChange={handleChange}
                   required
@@ -392,7 +463,9 @@ function Booking() {
             </div>
 
             <div className="mb-4">
-              <label className="form-label">Additional Requests</label>
+              <label className="form-label">
+                Additional Requests
+              </label>
 
               <textarea
                 className="form-control"

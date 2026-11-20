@@ -5,12 +5,12 @@ const {
   adminGetAccommodations,
   createAccommodation,
   updateAccommodation,
-  deleteAccommodation
+  deleteAccommodation,
 } = require("../controllers/accommodationController");
 
-const { verifyToken, adminOnly } = require("../middleware/authMiddleware");
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", adminGetAccommodations);
 router.post("/", createAccommodation);

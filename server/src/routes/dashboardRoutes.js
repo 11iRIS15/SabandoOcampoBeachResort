@@ -2,15 +2,15 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getDashboardStats
+  getDashboardStats,
 } = require("../controllers/dashboardController");
 
 const {
   verifyToken,
-  adminOnly
+  verifyAdmin,
 } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", getDashboardStats);
 

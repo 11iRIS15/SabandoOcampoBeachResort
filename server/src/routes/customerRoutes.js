@@ -3,19 +3,15 @@ const router = express.Router();
 
 const {
   getAllCustomers,
-  getCustomerById,
-  getCustomerBookings
 } = require("../controllers/customerController");
 
 const {
   verifyToken,
-  adminOnly
+  verifyAdmin,
 } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", getAllCustomers);
-router.get("/:id", getCustomerById);
-router.get("/:id/bookings", getCustomerBookings);
 
 module.exports = router;

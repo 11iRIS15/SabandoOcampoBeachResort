@@ -3,15 +3,15 @@ const router = express.Router();
 
 const {
   getAllPayments,
-  updatePaymentStatus
+  updatePaymentStatus,
 } = require("../controllers/paymentController");
 
 const {
   verifyToken,
-  adminOnly
+  verifyAdmin,
 } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", getAllPayments);
 router.patch("/:id/status", updatePaymentStatus);

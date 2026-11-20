@@ -3,15 +3,15 @@ const router = express.Router();
 
 const {
   getAllContacts,
-  updateContactStatus
+  updateContactStatus,
 } = require("../controllers/contactController");
 
 const {
   verifyToken,
-  adminOnly
+  verifyAdmin,
 } = require("../middleware/authMiddleware");
 
-router.use(verifyToken, adminOnly);
+router.use(verifyToken, verifyAdmin);
 
 router.get("/", getAllContacts);
 router.patch("/:id/status", updateContactStatus);
