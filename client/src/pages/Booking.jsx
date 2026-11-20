@@ -28,7 +28,6 @@ function Booking() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Get accommodations from the backend.
   useEffect(() => {
     async function fetchRooms() {
       try {
@@ -37,7 +36,10 @@ function Booking() {
 
         const response = await api.get("/accommodations");
 
-        const accommodationData = response.data.accommodations || [];
+        const accommodationData =
+          response.data.accommodations ||
+          response.data.data ||
+          [];
 
         const roomData = accommodationData
           .filter((item) => {
@@ -46,11 +48,12 @@ function Booking() {
             return category === "room" || category === "sori annex";
           })
           .map((item) => ({
-            id: item.accommodation_code,
+            id: item._id,
+            code: item.accommodation_code,
             name: item.name,
-            price: Number(item.price),
-            guests: Number(item.capacity),
-            units: Number(item.quantity),
+            price: Number(item.price || 0),
+            guests: Number(item.capacity || 1),
+            units: Number(item.quantity || 0),
             image: item.image,
             description: item.description,
             category: item.category,
@@ -58,8 +61,12 @@ function Booking() {
 
         setRooms(roomData);
 
-        // Select the accommodation from the URL.
-        if (id && roomData.some((room) => room.id === id)) {
+        if (
+          id &&
+          roomData.some(
+            (room) => room.id === id || room.code === id
+          )
+        ) {
           setForm((previous) => ({
             ...previous,
             accommodationId: id,
@@ -80,9 +87,10 @@ function Booking() {
     fetchRooms();
   }, [id]);
 
-  // Find the selected accommodation.
   const selectedRoom = rooms.find(
-    (room) => room.id === form.accommodationId
+    (room) =>
+      room.id === form.accommodationId ||
+      room.code === form.accommodationId
   );
 
   function handleChange(event) {
@@ -94,6 +102,22 @@ function Booking() {
       ...(name === "accommodationId" ? { guests: 1 } : {}),
     }));
   }
+
+  function calculateNights() {
+    if (!form.checkIn || !form.checkOut) return 0;
+
+    const checkIn = new Date(`${form.checkIn}T00:00:00`);
+    const checkOut = new Date(`${form.checkOut}T00:00:00`);
+
+    const difference = checkOut - checkIn;
+
+    return Math.max(0, Math.ceil(difference / (1000 * 60 * 60 * 24)));
+  }
+
+  const nights = calculateNights();
+  const estimatedTotal = selectedRoom
+    ? selectedRoom.price * nights
+    : 0;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -134,10 +158,15 @@ function Booking() {
       return;
     }
 
+    if (Number(form.guests) < 1) {
+      setError("Number of guests must be at least 1.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await api.post("/bookings", {
+      const response = await api.post("/mongodb/bookings", {
         accommodationId: selectedRoom.id,
         fullName: form.fullName,
         email: form.email,
@@ -172,15 +201,10 @@ function Booking() {
     <section className="section-padding bg-soft">
       <div className="container">
         <div className="booking-form-card">
-
           <div className="text-center mb-4">
-            <span className="section-label">
-              RESERVATION REQUEST
-            </span>
+            <span className="section-label">RESERVATION REQUEST</span>
 
-            <h1 className="section-title">
-              Book Your Stay
-            </h1>
+            <h1 className="section-title">Book Your Stay</h1>
 
             <p>
               Complete the form to request your accommodation.
@@ -195,21 +219,15 @@ function Booking() {
           )}
 
           {roomError && (
-            <div className="alert alert-danger">
-              {roomError}
-            </div>
+            <div className="alert alert-danger">{roomError}</div>
           )}
 
           {error && (
-            <div className="alert alert-danger">
-              {error}
-            </div>
+            <div className="alert alert-danger">{error}</div>
           )}
 
           {success && (
-            <div className="alert alert-success">
-              {success}
-            </div>
+            <div className="alert alert-success">{success}</div>
           )}
 
           {loadingRooms && (
@@ -223,13 +241,28 @@ function Booking() {
               <h5>{selectedRoom.name}</h5>
 
               <p className="mb-1">
-                Historical 2025 rate: ₱
+                Rate per night: ₱
                 {selectedRoom.price.toLocaleString("en-PH")}
               </p>
 
               <p className="mb-0">
-                Listed capacity: {selectedRoom.guests} guests
+                Maximum capacity: {selectedRoom.guests} guests
               </p>
+
+              {form.checkIn && form.checkOut && nights > 0 && (
+                <>
+                  <hr />
+
+                  <p className="mb-1">
+                    Number of nights: {nights}
+                  </p>
+
+                  <h5 className="mb-0">
+                    Estimated total: ₱
+                    {estimatedTotal.toLocaleString("en-PH")}
+                  </h5>
+                </>
+              )}
             </div>
           )}
 
@@ -240,9 +273,7 @@ function Booking() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">
-                  Full Name
-                </label>
+                <label className="form-label">Full Name</label>
 
                 <input
                   className="form-control"
@@ -254,9 +285,7 @@ function Booking() {
               </div>
 
               <div className="col-md-6 mb-3">
-                <label className="form-label">
-                  Email Address
-                </label>
+                <label className="form-label">Email Address</label>
 
                 <input
                   type="email"
@@ -270,9 +299,7 @@ function Booking() {
             </div>
 
             <div className="mb-4">
-              <label className="form-label">
-                Contact Number
-              </label>
+              <label className="form-label">Contact Number</label>
 
               <input
                 type="tel"
@@ -291,9 +318,7 @@ function Booking() {
             </h5>
 
             <div className="mb-3">
-              <label className="form-label">
-                Accommodation
-              </label>
+              <label className="form-label">Accommodation</label>
 
               <select
                 className="form-select"
@@ -303,9 +328,7 @@ function Booking() {
                 required
                 disabled={loadingRooms || Boolean(roomError)}
               >
-                <option value="">
-                  Select accommodation
-                </option>
+                <option value="">Select accommodation</option>
 
                 {rooms.map((room) => (
                   <option key={room.id} value={room.id}>
@@ -319,9 +342,7 @@ function Booking() {
 
             <div className="row">
               <div className="col-md-4 mb-3">
-                <label className="form-label">
-                  Check-in Date
-                </label>
+                <label className="form-label">Check-in Date</label>
 
                 <input
                   type="date"
@@ -335,18 +356,13 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">
-                  Check-out Date
-                </label>
+                <label className="form-label">Check-out Date</label>
 
                 <input
                   type="date"
                   className="form-control"
                   name="checkOut"
-                  min={
-                    form.checkIn ||
-                    new Date().toLocaleDateString("en-CA")
-                  }
+                  min={form.checkIn || new Date().toLocaleDateString("en-CA")}
                   value={form.checkOut}
                   onChange={handleChange}
                   required
@@ -354,9 +370,7 @@ function Booking() {
               </div>
 
               <div className="col-md-4 mb-3">
-                <label className="form-label">
-                  Number of Guests
-                </label>
+                <label className="form-label">Number of Guests</label>
 
                 <input
                   type="number"
@@ -378,9 +392,7 @@ function Booking() {
             </div>
 
             <div className="mb-4">
-              <label className="form-label">
-                Additional Requests
-              </label>
+              <label className="form-label">Additional Requests</label>
 
               <textarea
                 className="form-control"

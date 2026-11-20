@@ -1,44 +1,56 @@
 
 const jwt = require("jsonwebtoken");
 
+// ==========================================
+// VERIFY TOKEN
+// ==========================================
+
 const verifyToken = (req, res, next) => {
-    try {
-        const authHeader = req.headers.authorization;
+  try {
+    const authHeader = req.headers.authorization;
 
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return res.status(401).json({
-                success: false,
-                message: "Access denied. Please log in."
-            });
-        }
-
-        const token = authHeader.split(" ")[1];
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        req.user = decoded;
-
-        next();
-    } catch (error) {
-        return res.status(401).json({
-            success: false,
-            message: "Invalid or expired token."
-        });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Access denied. No token provided.",
+      });
     }
-};
 
-const adminOnly = (req, res, next) => {
-    if (req.user.role !== "admin") {
-        return res.status(403).json({
-            success: false,
-            message: "Administrator access required."
-        });
-    }
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      role: decoded.role,
+    };
 
     next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token.",
+    });
+  }
+};
+
+// ==========================================
+// VERIFY ADMIN
+// ==========================================
+
+const verifyAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Admin privileges required.",
+    });
+  }
+
+  next();
 };
 
 module.exports = {
-    verifyToken,
-    adminOnly
+  verifyToken,
+  verifyAdmin,
 };

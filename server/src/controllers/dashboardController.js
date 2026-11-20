@@ -1,105 +1,75 @@
-const { pool } = require("../config/database");
+const User = require("../models/User");
+const Booking = require("../models/Booking");
+const Payment = require("../models/Payment");
+const Accommodation = require("../models/Accommodation");
 
-// Get administrator dashboard statistics
-const getDashboardStats = async (req, res) => {
-  try {
-    // Total customers
-    const [customers] = await pool.query(
-      `SELECT COUNT(*) AS total_customers
-       FROM users
-       WHERE role = 'customer'`
-    );
+// ADMIN DASHBOARD STATISTICS (MONGODB)
+const getDashboardStats = async (req, res) =>  {
+    try {
+        // Total registered customers
+        const totalCustomers = await User.countDocuments({
+            role: "customer"
+        });
 
-    // Total bookings
-    const [bookings] = await pool.query(
-      `SELECT COUNT(*) AS total_bookings
-       FROM bookings`
-    );
+        // Total bookings
+        const totalBookings = await Booking.countDocuments();
 
-    // Pending bookings
-    const [pending] = await pool.query(
-      `SELECT COUNT(*) AS pending_bookings
-       FROM bookings
-       WHERE status = 'Pending'`
-    );
+        // Total accommodations
+        const totalAccommodations = await Accommodation.countDocuments({
+            is_active: true
+        });
 
-    // Approved bookings
-    const [approved] = await pool.query(
-      `SELECT COUNT(*) AS approved_bookings
-       FROM bookings
-       WHERE status = 'Approved'`
-    );
+        // Total verified payments
+        const totalPayments = await Payment.aggregate([
+            {
+                $match: {
+                    payment_status: "verified"
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: "$amount" }
+                }
+            }
+        ]);
 
-    // Rejected bookings
-    const [rejected] = await pool.query(
-      `SELECT COUNT(*) AS rejected_bookings
-       FROM bookings
-       WHERE status = 'Rejected'`
-    );
+        // Recent bookings
+        const recentBookings = await Booking.find()
+            .populate("accommodation_id", "name")
+            .sort({ createdAt: -1 })
+            .limit(5);
 
-    // Cancelled bookings
-    const [cancelled] = await pool.query(
-      `SELECT COUNT(*) AS cancelled_bookings
-       FROM bookings
-       WHERE status = 'Cancelled'`
-    );
+        // Format recent bookings for the existing frontend
+        const formattedBookings = recentBookings.map((booking) => ({
+            _id: booking._id,
+            fullName: booking.full_name,
+            accommodationName: booking.accommodation_id?.name || "Unknown Accommodation",
+            checkIn: booking.check_in,
+            checkOut: booking.check_out,
+            guests: booking.guests,
+            status: booking.status
+        }));
 
-    // Total verified payments
-    const [payments] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total_payments
-       FROM payments
-       WHERE status = 'Paid'`
-    );
+        return res.json({
+            success: true,
+            stats: {
+                reservations: totalBookings,
+                customers: totalCustomers,
+                accommodations: totalAccommodations,
+                payments: totalPayments[0]?.total || 0
+            },
+            recentBookings: formattedBookings
+        });
 
-    // Pending payments
-    const [pendingPayments] = await pool.query(
-      `SELECT COUNT(*) AS pending_payments
-       FROM payments
-       WHERE status = 'Pending'`
-    );
+    } catch (error) {
+        console.error("Dashboard MongoDB error:", error);
 
-    // Recent bookings
-    const [recentBookings] = await pool.query(
-      `SELECT
-         b.id,
-         b.booking_reference,
-         b.full_name,
-         b.check_in,
-         b.check_out,
-         b.guests,
-         b.total_amount,
-         b.status,
-         b.created_at,
-         a.name AS accommodation_name
-       FROM bookings b
-       JOIN accommodations a ON b.accommodation_id = a.id
-       ORDER BY b.created_at DESC
-       LIMIT 5`
-    );
-
-    return res.json({
-      success: true,
-      statistics: {
-        totalCustomers: customers[0].total_customers,
-        totalBookings: bookings[0].total_bookings,
-        pendingBookings: pending[0].pending_bookings,
-        approvedBookings: approved[0].approved_bookings,
-        rejectedBookings: rejected[0].rejected_bookings,
-        cancelledBookings: cancelled[0].cancelled_bookings,
-        totalPayments: payments[0].total_payments,
-        pendingPayments: pendingPayments[0].pending_payments
-      },
-      recentBookings
-    });
-
-  } catch (error) {
-    console.error("Dashboard error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to retrieve dashboard statistics."
-    });
-  }
+        return res.status(500).json({
+            success: false,
+            message: "Unable to load dashboard information."
+        });
+    }
 };
 
 module.exports = { getDashboardStats };

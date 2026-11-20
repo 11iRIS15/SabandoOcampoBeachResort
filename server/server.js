@@ -6,8 +6,8 @@ const cors = require("cors");
 const path = require("path");
 const multer = require("multer");
 
-// Database connection
-const { testConnection } = require("./src/config/database");
+// Database connections
+const connectMongoDB = require("./src/config/mongodb");
 
 // Route imports
 const authRoutes = require("./src/routes/authRoutes");
@@ -15,8 +15,9 @@ const authRoutes = require("./src/routes/authRoutes");
 const accommodationRoutes = require("./src/routes/accommodationRoutes");
 const adminAccommodationRoutes = require("./src/routes/adminAccommodationRoutes");
 
-const bookingRoutes = require("./src/routes/bookingRoutes");
-const adminBookingRoutes = require("./src/routes/adminBookingRoutes");
+// MongoDB Booking Routes
+const bookingMongoRoutes = require("./src/routes/bookingMongoRoutes");
+const adminBookingMongoRoutes = require("./src/routes/adminBookingMongoRoutes");
 
 const paymentRoutes = require("./src/routes/paymentRoutes");
 const adminPaymentRoutes = require("./src/routes/adminPaymentRoutes");
@@ -32,11 +33,31 @@ const reportRoutes = require("./src/routes/reportRoutes");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration
+// ==========================================
+// CORS CONFIGURATION
+// ==========================================
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true
+    origin: function (origin, callback) {
+      // Allow requests without an origin
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Allow approved frontend origins
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+    credentials: true,
   })
 );
 
@@ -50,80 +71,121 @@ app.use(
   express.static(path.join(__dirname, "uploads"))
 );
 
-// Main API routes
+// ==========================================
+// MAIN API ROUTE
+// ==========================================
+
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "Sabando Ocampo Beach Resort API is running!"
+    message: "Sabando Ocampo Beach Resort API is running!",
   });
 });
 
-// Health check
+// ==========================================
+// HEALTH CHECK
+// ==========================================
+
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: "API is healthy"
+    message: "API is healthy",
   });
 });
 
-// Authentication
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+
 app.use("/api/auth", authRoutes);
 
-// Accommodations
+// ==========================================
+// ACCOMMODATIONS
+// ==========================================
+
 app.use("/api/accommodations", accommodationRoutes);
 app.use("/api/admin/accommodations", adminAccommodationRoutes);
 
-// Bookings
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/admin/bookings", adminBookingRoutes);
+// ==========================================
+// MONGODB BOOKING ROUTES
+// ==========================================
 
-// Payments
+app.use("/api/mongodb/bookings", bookingMongoRoutes);
+app.use("/api/mongodb/admin/bookings", adminBookingMongoRoutes);
+
+// ==========================================
+// PAYMENTS
+// ==========================================
+
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin/payments", adminPaymentRoutes);
 
-// Contact and inquiries
+// ==========================================
+// CONTACT AND INQUIRIES
+// ==========================================
+
 app.use("/api/contact", contactRoutes);
 app.use("/api/admin/contacts", adminContactRoutes);
 
-// Admin dashboard
+// ==========================================
+// ADMIN DASHBOARD
+// ==========================================
+
 app.use("/api/admin/dashboard", dashboardRoutes);
 
-// Customer management
+// ==========================================
+// CUSTOMER MANAGEMENT
+// ==========================================
+
 app.use("/api/admin/customers", customerRoutes);
 
-// Reports
+// ==========================================
+// REPORTS
+// ==========================================
+
 app.use("/api/admin/reports", reportRoutes);
 
-// Handle unknown routes
+// ==========================================
+// HANDLE UNKNOWN ROUTES
+// ==========================================
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route not found: ${req.method} ${req.originalUrl}`
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
 
-// Global error handler
+// ==========================================
+// GLOBAL ERROR HANDLER
+// ==========================================
+
 app.use((err, req, res, next) => {
   console.error("Server error:", err);
 
   if (err instanceof multer.MulterError) {
     return res.status(400).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 
   return res.status(400).json({
     success: false,
-    message: err.message || "An unexpected error occurred."
+    message: err.message || "An unexpected error occurred.",
   });
 });
 
-// Start server after testing database connection
+// ==========================================
+// START SERVER
+// ==========================================
+
 const startServer = async () => {
   try {
-    await testConnection();
+    // Connect to MongoDB Atlas
+    await connectMongoDB();
 
+    // Start Express
     app.listen(PORT, () => {
       console.log("----------------------------------------");
       console.log("SABANDO OCAMPO BEACH RESORT API");
@@ -132,11 +194,15 @@ const startServer = async () => {
       console.log(`API URL: http://localhost:${PORT}/api`);
       console.log(`Health Check: http://localhost:${PORT}/api/health`);
       console.log("----------------------------------------");
-      console.log("Database connection successful!");
+      console.log("MongoDB Atlas connection successful!");
+      console.log("----------------------------------------");
+      console.log("MongoDB Booking API:");
+      console.log(`Customer: http://localhost:${PORT}/api/mongodb/bookings`);
+      console.log(`Admin: http://localhost:${PORT}/api/mongodb/admin/bookings`);
+      console.log("----------------------------------------");
     });
-
   } catch (error) {
-    console.error("Server startup failed:", error.message);
+    console.error("Failed to start server:", error.message);
     process.exit(1);
   }
 };

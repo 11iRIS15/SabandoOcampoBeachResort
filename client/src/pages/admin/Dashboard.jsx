@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   CalendarDays,
@@ -23,12 +24,16 @@ function Dashboard() {
       try {
         const response = await api.get("/admin/dashboard");
 
-        setStats(response.data.stats || stats);
+        setStats((previous) => ({
+          ...previous,
+          ...(response.data.stats || {}),
+        }));
+
         setRecentBookings(response.data.recentBookings || []);
       } catch (err) {
         setError(
           err.response?.data?.message ||
-          "Unable to load dashboard information. Check the backend."
+            "Unable to load dashboard information. Check the backend."
         );
       }
     }
@@ -58,6 +63,16 @@ function Dashboard() {
       icon: <CreditCard />,
     },
   ];
+
+  function formatDate(date) {
+    if (!date) return "—";
+
+    return new Date(date).toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
 
   return (
     <div className="admin-page">
@@ -104,14 +119,33 @@ function Dashboard() {
                   <th>Status</th>
                 </tr>
               </thead>
+
               <tbody>
                 {recentBookings.map((booking) => (
                   <tr key={booking._id}>
-                    <td>{booking.fullName || booking.customer?.fullName}</td>
-                    <td>{booking.accommodationName || booking.room?.name}</td>
-                    <td>{booking.checkIn?.slice(0, 10)}</td>
-                    <td>{booking.guests}</td>
-                    <td>{booking.status}</td>
+                    <td>
+                      {booking.user?.full_name ||
+                        booking.full_name ||
+                        booking.fullName ||
+                        booking.customer?.full_name ||
+                        booking.customer?.fullName ||
+                        "—"}
+                    </td>
+
+                    <td>
+                      {booking.accommodation_id?.name ||
+                        booking.accommodationName ||
+                        booking.room?.name ||
+                        "—"}
+                    </td>
+
+                    <td>
+                      {formatDate(booking.check_in || booking.checkIn)}
+                    </td>
+
+                    <td>{booking.guests ?? "—"}</td>
+
+                    <td>{booking.status || "Pending"}</td>
                   </tr>
                 ))}
               </tbody>

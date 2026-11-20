@@ -1,19 +1,26 @@
+
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 
 function ManagePayments() {
   const [payments, setPayments] = useState([]);
   const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
     async function loadPayments() {
       try {
         const response = await api.get("/admin/payments");
-        setPayments(response.data.payments || response.data);
+
+        setPayments(
+          response.data.payments ||
+            response.data.data ||
+            []
+        );
       } catch (err) {
         setError(
           err.response?.data?.message ||
-          "Unable to load payment records."
+            "Unable to load payment records."
         );
       }
     }
@@ -23,19 +30,52 @@ function ManagePayments() {
 
   async function updatePayment(id, status) {
     try {
-      await api.patch(`/admin/payments/${id}/status`, { status });
+      setUpdatingId(id);
+      setError("");
+
+      await api.patch(`/admin/payments/${id}/status`, {
+        status: status.toLowerCase(),
+      });
 
       setPayments((previous) =>
         previous.map((payment) =>
-          payment._id === id ? { ...payment, status } : payment
+          payment._id === id
+            ? {
+                ...payment,
+                payment_status: status.toLowerCase(),
+              }
+            : payment
         )
       );
     } catch (err) {
       setError(
         err.response?.data?.message ||
-        "Unable to update payment."
+          "Unable to update payment."
       );
+    } finally {
+      setUpdatingId(null);
     }
+  }
+
+  function formatDate(date) {
+    if (!date) return "—";
+
+    const parsedDate = new Date(date);
+
+    if (isNaN(parsedDate.getTime())) return "—";
+
+    return parsedDate.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  function formatAmount(amount) {
+    return Number(amount || 0).toLocaleString("en-PH", {
+      style: "currency",
+      currency: "PHP",
+    });
   }
 
   return (
@@ -66,30 +106,91 @@ function ManagePayments() {
             </thead>
 
             <tbody>
-              {payments.map((payment) => (
-                <tr key={payment._id}>
-                  <td>{payment.bookingReference || payment.booking?._id}</td>
-                  <td>{payment.customerName || payment.customer?.fullName}</td>
-                  <td>₱{Number(payment.amount || 0).toLocaleString("en-PH")}</td>
-                  <td>{payment.method || "Not specified"}</td>
-                  <td>{payment.createdAt?.slice(0, 10) || "—"}</td>
-                  <td>{payment.status}</td>
-                  <td>
-                    <select
-                      className="form-select form-select-sm"
-                      value={payment.status || "Pending"}
-                      onChange={(event) =>
-                        updatePayment(payment._id, event.target.value)
-                      }
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Paid">Paid</option>
-                      <option value="Failed">Failed</option>
-                      <option value="Refunded">Refunded</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {payments.map((payment) => {
+                const status =
+                  payment.payment_status ||
+                  payment.status ||
+                  "pending";
+
+                const booking =
+                  typeof payment.booking === "object"
+                    ? payment.booking
+                    : null;
+
+                const customer =
+                  booking?.user ||
+                  payment.user ||
+                  payment.customer ||
+                  null;
+
+                const bookingReference =
+                  booking?.booking_reference ||
+                  booking?._id ||
+                  payment.booking_reference ||
+                  payment.booking_id ||
+                  "N/A";
+
+                const customerName =
+                  booking?.full_name ||
+                  customer?.full_name ||
+                  customer?.fullName ||
+                  customer?.name ||
+                  "—";
+
+                const amount =
+                  payment.amount ??
+                  payment.total_amount ??
+          payment.total_price ??
+                  0;
+
+                const paymentMethod =
+                  payment.payment_method ||
+                  payment.method ||
+          "Not specified";
+
+                const paymentDate =
+                  payment.created_at ||
+                  payment.createdAt ||
+                  payment.payment_date;
+
+                return (
+                  <tr key={payment._id}>
+                    <td>{bookingReference}</td>
+
+                    <td>{customerName}</td>
+
+                    <td>{formatAmount(amount)}</td>
+
+                    <td>{paymentMethod}</td>
+
+                    <td>{formatDate(paymentDate)}</td>
+
+                    <td>
+                      {status.charAt(0).toUpperCase() +
+                        status.slice(1)}
+                    </td>
+
+                    <td>
+                      <select
+                        className="form-select form-select-sm"
+                        value={status.toLowerCase()}
+                        disabled={updatingId === payment._id}
+                        onChange={(event) =>
+                          updatePayment(
+                            payment._id,
+                            event.target.value
+                          )
+                        }
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="verified">Verified</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="refunded">Refunded</option>
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {payments.length === 0 && (
                 <tr>

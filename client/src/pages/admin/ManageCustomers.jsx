@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
 import api from "../../services/api";
 
 function ManageCustomers() {
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadCustomers() {
       try {
         const response = await api.get("/admin/customers");
-        setCustomers(response.data.customers || response.data);
-      } catch (err) {
-        setError(
-          err.response?.data?.message ||
-          "Unable to load customer records."
-        );
+
+        setCustomers(response.data.customers || response.data || []);
+      } catch (error) {
+        console.error("Unable to load customers:", error);
+        alert("Unable to load customer records.");
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -24,70 +24,83 @@ function ManageCustomers() {
   }, []);
 
   const filteredCustomers = customers.filter((customer) => {
-    const searchText = search.toLowerCase();
+    const name = customer.full_name || customer.fullName || "";
+    const email = customer.email || "";
+    const phone = customer.phone || "";
 
     return (
-      customer.fullName?.toLowerCase().includes(searchText) ||
-      customer.email?.toLowerCase().includes(searchText) ||
-      customer.phone?.toLowerCase().includes(searchText)
+      name.toLowerCase().includes(search.toLowerCase()) ||
+      email.toLowerCase().includes(search.toLowerCase()) ||
+      phone.toLowerCase().includes(search.toLowerCase())
     );
   });
 
   return (
     <div className="admin-page">
-      <div className="admin-page-heading">
-        <div>
-          <span className="section-label">CUSTOMER MANAGEMENT</span>
-          <h1>Manage Customers</h1>
-          <p>View registered resort customers.</p>
-        </div>
+      <div className="page-header">
+        <span className="section-label">CUSTOMER MANAGEMENT</span>
+        <h1>Manage Customers</h1>
+        <p>View registered resort customers.</p>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
-
-      <div className="admin-table-card">
-        <div className="search-box mb-4">
-          <Search size={18} />
+      <div className="content-card">
+        <div className="table-header">
           <input
-            type="search"
-            className="form-control"
-            placeholder="Search by name, email, or contact number"
+            type="text"
+            placeholder="Search customers..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
+
+          <span>{customers.length} customers</span>
         </div>
 
-        <div className="table-responsive">
-          <table className="table align-middle">
-            <thead>
-              <tr>
-                <th>Customer Name</th>
-                <th>Email Address</th>
-                <th>Contact Number</th>
-                <th>Registered Date</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredCustomers.map((customer) => (
-                <tr key={customer._id}>
-                  <td>{customer.fullName}</td>
-                  <td>{customer.email}</td>
-                  <td>{customer.phone || "—"}</td>
-                  <td>{customer.createdAt?.slice(0, 10) || "—"}</td>
-                </tr>
-              ))}
-
-              {filteredCustomers.length === 0 && (
+        {loading ? (
+          <p>Loading customers...</p>
+        ) : (
+          <div className="table-responsive">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="4" className="text-center text-muted">
-                    No customers found.
-                  </td>
+                  <th>Customer Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Date Registered</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody>
+                {filteredCustomers.map((customer) => (
+                  <tr key={customer._id}>
+                    <td>
+                      {customer.full_name || customer.fullName || "—"}
+                    </td>
+
+                    <td>{customer.email || "—"}</td>
+
+                    <td>{customer.phone || "—"}</td>
+
+                    <td>
+                      {customer.created_at
+                        ? new Date(customer.created_at).toLocaleDateString()
+                        : customer.createdAt
+                        ? new Date(customer.createdAt).toLocaleDateString()
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredCustomers.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="empty-state">
+                      No customers found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

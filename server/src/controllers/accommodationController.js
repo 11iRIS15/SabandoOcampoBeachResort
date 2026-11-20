@@ -1,30 +1,41 @@
+const Accommodation = require("../models/Accommodation");
 
-const { pool } = require("../config/database");
+// Helper: find accommodation using MongoDB ID or accommodation code
+const findAccommodation = async (identifier) => {
+    const conditions = [
+        { accommodation_code: identifier }
+    ];
 
-// GET ALL ACCOMMODATIONS
+    // Only search by MongoDB ID if identifier is a valid ObjectId
+    if (/^[0-9a-fA-F]{24}$/.test(identifier)) {
+        conditions.push({ _id: identifier });
+    }
+
+    return Accommodation.findOne({ $or: conditions });
+};
+
+// Helper: convert MongoDB _id into id for frontend compatibility
+const formatAccommodation = (accommodation) => {
+    const item = accommodation.toObject();
+
+    return {
+        ...item,
+        id: item._id.toString()
+    };
+};
+
+// GET ALL ACTIVE ACCOMMODATIONS
 const getAccommodations = async (req, res) => {
     try {
-        const [accommodations] = await pool.query(
-            `SELECT
-                id,
-                accommodation_code,
-                name,
-                category,
-                description,
-                price,
-                capacity,
-                quantity,
-                image,
-                is_active
-             FROM accommodations
-             WHERE is_active = TRUE
-             ORDER BY id DESC`
-        );
+        const accommodations = await Accommodation.find({ is_active: true })
+            .sort({ createdAt: -1 });
+
+        const formattedAccommodations = accommodations.map(formatAccommodation);
 
         return res.status(200).json({
             success: true,
-            count: accommodations.length,
-            accommodations
+            count: formattedAccommodations.length,
+            accommodations: formattedAccommodations
         });
 
     } catch (error) {
@@ -40,16 +51,9 @@ const getAccommodations = async (req, res) => {
 // GET SINGLE ACCOMMODATION
 const getAccommodationById = async (req, res) => {
     try {
-        const identifier = req.params.id;
+        const accommodation = await findAccommodation(req.params.id);
 
-        const [rows] = await pool.query(
-            `SELECT * FROM accommodations
-             WHERE accommodation_code = ? OR id = ?
-             LIMIT 1`,
-            [identifier, identifier]
-        );
-
-        if (rows.length === 0 || !rows[0].is_active) {
+        if (!accommodation || !accommodation.is_active) {
             return res.status(404).json({
                 success: false,
                 message: "Accommodation not found."
@@ -58,7 +62,7 @@ const getAccommodationById = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            accommodation: rows[0]
+            accommodation: formatAccommodation(accommodation)
         });
 
     } catch (error) {
@@ -74,14 +78,15 @@ const getAccommodationById = async (req, res) => {
 // ADMIN: GET ALL ACCOMMODATIONS INCLUDING INACTIVE
 const adminGetAccommodations = async (req, res) => {
     try {
-        const [accommodations] = await pool.query(
-            `SELECT * FROM accommodations ORDER BY id DESC`
-        );
+        const accommodations = await Accommodation.find()
+            .sort({ createdAt: -1 });
+
+        const formattedAccommodations = accommodations.map(formatAccommodation);
 
         return res.status(200).json({
             success: true,
-            count: accommodations.length,
-            accommodations
+            count: formattedAccommodations.length,
+            accommodations: formattedAccommodations
         });
 
     } catch (error) {
@@ -99,14 +104,14 @@ const createAccommodation = async (req, res) => {
     try {
         const {
             accommodation_code,
-            code,
+        code,
             name,
-            category,
-            description,
-            price,
-            capacity,
-            quantity,
-            image
+        category,
+        description,
+        price,
+        capacity,
+        quantity,
+        image
         } = req.body;
 
         const accommodationCode = accommodation_code || code;
@@ -135,48 +140,33 @@ const createAccommodation = async (req, res) => {
             });
         }
 
-        const [existing] = await pool.query(
-            `SELECT id FROM accommodations
-             WHERE accommodation_code = ?`,
-            [accommodationCode]
-        );
+        const existing = await Accommodation.findOne({
+            accommodation_code: accommodationCode
+        });
 
-        if (existing.length > 0) {
+        if (existing) {
             return res.status(409).json({
                 success: false,
                 message: "Accommodation code already exists."
             });
         }
 
-        const [result] = await pool.query(
-            `INSERT INTO accommodations
-            (
-                accommodation_code,
-                name,
-                category,
-                description,
-                price,
-                capacity,
-                quantity,
-                image
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                accommodationCode,
-                name,
-                category || null,
-                description || null,
-                Number(price),
-                Number(capacity),
-                Math.max(1, Number(quantity) || 1),
-                image || null
-            ]
-        );
+        const accommodation = await Accommodation.create({
+            accommodation_code: accommodationCode,
+            name,
+            category: category || "Other",
+            description: description || "",
+            price: Number(price),
+            capacity: Number(capacity),
+            quantity: Math.max(1, Number(quantity) || 1),
+            image: image || "",
+            is_active: true
+        });
 
         return res.status(201).json({
             success: true,
             message: "Accommodation added successfully!",
-            id: result.insertId
+            id: accommodation._id.toString()
         });
 
     } catch (error) {
@@ -205,14 +195,9 @@ const updateAccommodation = async (req, res) => {
             is_active
         } = req.body;
 
-        const [existing] = await pool.query(
-            `SELECT id FROM accommodations
-             WHERE accommodation_code = ? OR id = ?
-             LIMIT 1`,
-            [identifier, identifier]
-        );
+        const existing = await findAccommodation(identifier);
 
-        if (existing.length === 0) {
+        if (!existing) {
             return res.status(404).json({
                 success: false,
                 message: "Accommodation not found."
@@ -249,29 +234,17 @@ const updateAccommodation = async (req, res) => {
             });
         }
 
-        await pool.query(
-            `UPDATE accommodations SET
-                name = COALESCE(?, name),
-                category = COALESCE(?, category),
-                description = COALESCE(?, description),
-                price = COALESCE(?, price),
-                capacity = COALESCE(?, capacity),
-                quantity = COALESCE(?, quantity),
-                image = COALESCE(?, image),
-                is_active = COALESCE(?, is_active)
-             WHERE id = ?`,
-            [
-                name ?? null,
-                category ?? null,
-                description ?? null,
-                price === undefined ? null : Number(price),
-                capacity === undefined ? null : Number(capacity),
-                quantity === undefined ? null : Number(quantity),
-                image ?? null,
-                is_active === undefined ? null : Boolean(is_active),
-                existing[0].id
-            ]
-        );
+        // Only update fields provided by the request
+        if (name !== undefined) existing.name = name;
+        if (category !== undefined) existing.category = category;
+        if (description !== undefined) existing.description = description;
+        if (price !== undefined) existing.price = Number(price);
+        if (capacity !== undefined) existing.capacity = Number(capacity);
+        if (quantity !== undefined) existing.quantity = Number(quantity);
+        if (image !== undefined) existing.image = image;
+        if (is_active !== undefined) existing.is_active = is_active;
+
+        await existing.save();
 
         return res.status(200).json({
             success: true,
@@ -291,21 +264,17 @@ const updateAccommodation = async (req, res) => {
 // ADMIN: DELETE ACCOMMODATION (SOFT DELETE)
 const deleteAccommodation = async (req, res) => {
     try {
-        const identifier = req.params.id;
+        const accommodation = await findAccommodation(req.params.id);
 
-        const [result] = await pool.query(
-            `UPDATE accommodations
-             SET is_active = FALSE
-             WHERE accommodation_code = ? OR id = ?`,
-            [identifier, identifier]
-        );
-
-        if (result.affectedRows === 0) {
+        if (!accommodation) {
             return res.status(404).json({
                 success: false,
                 message: "Accommodation not found."
             });
         }
+
+        accommodation.is_active = false;
+        await accommodation.save();
 
         return res.status(200).json({
             success: true,

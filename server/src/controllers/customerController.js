@@ -1,116 +1,135 @@
-const { pool } = require("../config/database");
 
-// Get all registered customers
+const User = require("../models/User");
+const Booking = require("../models/Booking");
+
+// ==========================================
+// GET ALL CUSTOMERS
+// ==========================================
+
 const getAllCustomers = async (req, res) => {
   try {
-    const [customers] = await pool.query(
-      `SELECT
-         u.id,
-         u.full_name,
-         u.email,
-         u.phone,
-         u.created_at,
-         COUNT(b.id) AS total_bookings
-       FROM users u
-       LEFT JOIN bookings b ON u.id = b.user_id
-       WHERE u.role = 'customer'
-       GROUP BY
-         u.id,
-         u.full_name,
-         u.email,
-         u.phone,
-         u.created_at
-       ORDER BY u.created_at DESC`
+    const customers = await User.find({ role: "customer" })
+      .select("-password")
+      .sort({ created_at: -1 });
+
+    const customersWithBookings = await Promise.all(
+      customers.map(async (customer) => {
+        const totalBookings = await Booking.countDocuments({
+          user: customer._id,
+        });
+
+        return {
+          id: customer._id,
+          _id: customer._id,
+          full_name: customer.full_name,
+          email: customer.email,
+          phone: customer.phone,
+          created_at: customer.created_at,
+          total_bookings: totalBookings,
+        };
+      })
     );
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      count: customers.length,
-      customers
+      customers: customersWithBookings,
     });
-
   } catch (error) {
-    console.error("Get customers error:", error);
+    console.error("Get all customers error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Unable to retrieve customers."
+      message: "Failed to retrieve customers.",
     });
   }
 };
 
+// ==========================================
+// GET CUSTOMER BY ID
+// ==========================================
 
-// Get a specific customer's details
 const getCustomerById = async (req, res) => {
   try {
-    const [customers] = await pool.query(
-      `SELECT
-         id,
-         full_name,
-         email,
-         phone,
-         created_at
-       FROM users
-       WHERE id = ? AND role = 'customer'`,
-      [req.params.id]
-    );
+    const customer = await User.findOne({
+      _id: req.params.id,
+      role: "customer",
+    }).select("-password");
 
-    if (customers.length === 0) {
+    if (!customer) {
       return res.status(404).json({
         success: false,
-        message: "Customer not found."
+        message: "Customer not found.",
       });
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      customer: customers[0]
+      customer: {
+        id: customer._id,
+        _id: customer._id,
+        full_name: customer.full_name,
+        email: customer.email,
+        phone: customer.phone,
+        role: customer.role,
+        created_at: customer.created_at,
+      },
     });
-
   } catch (error) {
-    console.error("Get customer error:", error);
+    console.error("Get customer by ID error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Unable to retrieve customer details."
+      message: "Failed to retrieve customer.",
     });
   }
 };
 
+// ==========================================
+// GET CUSTOMER BOOKINGS
+// ==========================================
 
-// Get one customer's booking history
 const getCustomerBookings = async (req, res) => {
   try {
-    const [bookings] = await pool.query(
-      `SELECT
-         b.*,
-         a.name AS accommodation_name
-       FROM bookings b
-       JOIN accommodations a ON b.accommodation_id = a.id
-       WHERE b.user_id = ?
-       ORDER BY b.created_at DESC`,
-      [req.params.id]
-    );
+    const customerId = req.params.id;
 
-    return res.json({
-      success: true,
-      count: bookings.length,
-      bookings
+    const customer = await User.findOne({
+      _id: customerId,
+      role: "customer",
     });
 
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found.",
+      });
+    }
+
+    const bookings = await Booking.find({
+      user: customer._id,
+    })
+      .populate("accommodation_id")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      bookings,
+    });
   } catch (error) {
     console.error("Get customer bookings error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Unable to retrieve customer booking history."
+      message: "Failed to retrieve customer bookings.",
     });
   }
 };
 
+// ==========================================
+// EXPORT CONTROLLERS
+// ==========================================
 
 module.exports = {
   getAllCustomers,
   getCustomerById,
-  getCustomerBookings
+  getCustomerBookings,
 };

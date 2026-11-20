@@ -1,6 +1,6 @@
-const { pool } = require("../config/database");
+const Contact = require("../models/Contact");
 
-// Customer sends a contact message
+// CUSTOMER SENDS A CONTACT MESSAGE
 const createContact = async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
@@ -32,27 +32,24 @@ const createContact = async (req, res) => {
       });
     }
 
-    const [result] = await pool.query(
-      `INSERT INTO contacts (name, email, subject, message)
-       VALUES (?, ?, ?, ?)`,
-      [
-        String(name).trim(),
-        String(email).trim(),
-        String(subject).trim(),
-        String(message).trim()
-      ]
-    );
+    const contact = await Contact.create({
+      name: String(name).trim(),
+      email: String(email).trim(),
+      subject: String(subject).trim(),
+      message: String(message).trim(),
+      status: "New"
+    });
 
     return res.status(201).json({
       success: true,
       message: "Your inquiry has been submitted successfully.",
       contact: {
-        id: result.insertId,
-        name,
-        email,
-        subject,
-        message,
-        status: "New"
+        id: contact._id,
+        name: contact.name,
+        email: contact.email,
+        subject: contact.subject,
+        message: contact.message,
+        status: contact.status
       }
     });
 
@@ -67,14 +64,11 @@ const createContact = async (req, res) => {
 };
 
 
-// Administrator views all inquiries
+// ADMINISTRATOR VIEWS ALL INQUIRIES
 const getAllContacts = async (req, res) => {
   try {
-    const [contacts] = await pool.query(
-      `SELECT *
-       FROM contacts
-       ORDER BY created_at DESC`
-    );
+    const contacts = await Contact.find()
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -93,7 +87,7 @@ const getAllContacts = async (req, res) => {
 };
 
 
-// Administrator updates inquiry status
+// ADMINISTRATOR UPDATES INQUIRY STATUS
 const updateContactStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -107,12 +101,13 @@ const updateContactStatus = async (req, res) => {
       });
     }
 
-    const [result] = await pool.query(
-      "UPDATE contacts SET status = ? WHERE id = ?",
-      [status, req.params.id]
+    const contact = await Contact.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true }
     );
 
-    if (result.affectedRows === 0) {
+    if (!contact) {
       return res.status(404).json({
         success: false,
         message: "Inquiry not found."
