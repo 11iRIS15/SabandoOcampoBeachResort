@@ -1,13 +1,30 @@
+import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const closeMenu = () => setMenuOpen(false);
+
+  const handleLogout = () => {
+    closeMenu();
+    logout();
+  };
+
+  const navLinkClass = ({ isActive }) =>
+    `nav-link${isActive ? " active" : ""}`;
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm">
+    <nav className="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm resort-navbar">
       <div className="container">
-        <Link to="/" className="navbar-brand d-flex align-items-center">
+        {/* Resort Logo and Brand */}
+        <Link
+          to="/"
+          className="navbar-brand d-flex align-items-center"
+          onClick={closeMenu}
+        >
           <img
             src="/images/logo.png"
             alt="Sabando Ocampo Beach Resort"
@@ -16,50 +33,85 @@ function Navbar() {
           <span className="brand-name">Sabando Ocampo</span>
         </Link>
 
+        {/* Mobile Hamburger Button */}
         <button
-          className="navbar-toggler"
+          className={`navbar-toggler ${menuOpen ? "menu-open" : ""}`}
           type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#resortNavbar"
+          onClick={() => setMenuOpen(!menuOpen)}
           aria-controls="resortNavbar"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
         >
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        <div className="collapse navbar-collapse" id="resortNavbar">
-          <div className="navbar-nav ms-auto align-items-lg-center">
-            <NavLink to="/" end className="nav-link">Home</NavLink>
-            <NavLink to="/about" className="nav-link">About</NavLink>
-            <NavLink to="/accommodations" className="nav-link">
+        {/* Navigation Links */}
+        <div
+          className={`collapse navbar-collapse ${menuOpen ? "show" : ""}`}
+          id="resortNavbar"
+        >
+          <div className="navbar-nav ms-auto align-items-lg-center resort-nav-links">
+            <NavLink to="/" end className={navLinkClass} onClick={closeMenu}>
+              Home
+            </NavLink>
+
+            <NavLink to="/about" className={navLinkClass} onClick={closeMenu}>
+              About
+            </NavLink>
+
+            <NavLink
+              to="/accommodations"
+              className={navLinkClass}
+              onClick={closeMenu}
+            >
               Accommodations
             </NavLink>
-            <NavLink to="/contact" className="nav-link">Contact</NavLink>
+
+            <NavLink
+              to="/contact"
+              className={navLinkClass}
+              onClick={closeMenu}
+            >
+              Contact
+            </NavLink>
 
             {isAuthenticated ? (
               <>
                 {user?.role === "admin" ? (
-                  <Link to="/admin" className="nav-link">Admin Panel</Link>
+                  <Link to="/admin" className="nav-link" onClick={closeMenu}>
+                    Admin Panel
+                  </Link>
                 ) : (
-                  <Link to="/my-bookings" className="nav-link">
+                  <Link
+                    to="/my-bookings"
+                    className="nav-link"
+                    onClick={closeMenu}
+                  >
                     My Bookings
                   </Link>
                 )}
 
                 <button
-                  className="btn btn-outline-danger ms-lg-2 mt-2 mt-lg-0"
-                  onClick={logout}
+                  className="btn btn-outline-danger nav-action-btn"
+                  onClick={handleLogout}
                 >
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <NavLink to="/login" className="nav-link">Login</NavLink>
+                <NavLink
+                  to="/login"
+                  className={navLinkClass}
+                  onClick={closeMenu}
+                >
+                  Login
+                </NavLink>
+
                 <Link
                   to="/register"
-                  className="btn btn-primary ms-lg-2 mt-2 mt-lg-0"
+                  className="btn btn-primary nav-action-btn"
+                  onClick={closeMenu}
                 >
                   Register
                 </Link>
@@ -68,7 +120,8 @@ function Navbar() {
 
             <Link
               to="/accommodations"
-              className="btn btn-book ms-lg-2 mt-2 mt-lg-0"
+              className="btn btn-book nav-action-btn"
+              onClick={closeMenu}
             >
               Book Now
             </Link>
